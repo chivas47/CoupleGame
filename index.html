@@ -453,6 +453,9 @@ const G={
 // ════════════════════════════════════════
 const $=id=>document.getElementById(id);
 function showScreen(id){
+  // Always kill csRevealWrap interactivity before switching screens
+  const crw=$('csRevealWrap');
+  if(crw) crw.classList.remove('on');
   document.querySelectorAll('.screen').forEach(s=>{
     if(s.id==='s-game')return;
     s.classList.add('hidden');
@@ -727,13 +730,15 @@ function hueDist(a,b){const d=Math.abs(a-b);return Math.min(d,360-d)}
 function startColorSoul(){
   G.cs1Hue=0;G.cs2Hue=180;G.cs1Picked=false;G.cs2Picked=false;
   $('csPickPhase').style.opacity='1';$('csPickPhase').style.pointerEvents='all';
-  $('csRevealWrap').classList.remove('on');
+  const rw=$('csRevealWrap');
+  rw.classList.remove('on');rw.style.pointerEvents=''; // reset inline override
   $('csCfm1').classList.remove('active');$('csCfm1').textContent='Confirm ✓';
   $('csCfm2').classList.remove('active');$('csCfm2').textContent='Confirm ✓';
   $('csLookAway1').textContent='👇 '+G.p2+', look away!';
   $('csLookAway2').textContent='☝️ '+G.p1+', look away!';
   $('csPlayerLbl1').textContent=G.p1+' — pick your color';
   $('csPlayerLbl2').textContent=G.p2+' — pick your color';
+  G._csMatch=null;G._csC1=null;G._csC2=null;
   drawColorWheel($('csWheel1'),G.cs1Hue);
   drawColorWheel($('csWheel2'),G.cs2Hue);
   showScreen('s-colorsoul');showHUD(true);
@@ -753,12 +758,34 @@ function setupWheel(canvasId,player){
   canvas.addEventListener('mousemove',e=>{if(e.buttons)onInput(e)});
 }
 setupWheel('csWheel1',1);setupWheel('csWheel2',2);
+function lockWheel(canvasId, playerNum){
+  const canvas=$(canvasId);
+  const ctx=canvas.getContext('2d');
+  const cx=canvas.width/2,cy=canvas.height/2,r=cx-2;
+  // draw solid dark cover
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle='rgba(11,7,32,.92)';ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=2;ctx.stroke();
+  // lock icon text
+  ctx.fillStyle='rgba(255,255,255,.35)';
+  ctx.font='bold 32px serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('🔒',cx,cy);
+}
+
 $('csCfm1').addEventListener('click',()=>{
-  G.cs1Picked=true;$('csCfm1').textContent='✓ Locked!';$('csCfm1').classList.add('active');
+  if(G.cs1Picked) return;
+  G.cs1Picked=true;
+  $('csCfm1').textContent='✓ Locked!';$('csCfm1').classList.add('active');
+  lockWheel('csWheel1',1);
   if(G.cs2Picked) doColorReveal();
 });
 $('csCfm2').addEventListener('click',()=>{
-  G.cs2Picked=true;$('csCfm2').textContent='✓ Locked!';$('csCfm2').classList.add('active');
+  if(G.cs2Picked) return;
+  G.cs2Picked=true;
+  $('csCfm2').textContent='✓ Locked!';$('csCfm2').classList.add('active');
+  lockWheel('csWheel2',2);
   if(G.cs1Picked) doColorReveal();
 });
 function doColorReveal(){
@@ -778,7 +805,11 @@ function doColorReveal(){
   },500);
 }
 $('csRevealNext').addEventListener('click',()=>{
+  // CRITICAL: kill pointer events immediately so this button can't fire twice
+  $('csRevealWrap').classList.remove('on');
+  $('csRevealWrap').style.pointerEvents='none';
   const m=G._csMatch||0,c1=G._csC1,c2=G._csC2;
+  if(!c1||!c2) return; // guard: reveal not ready yet
   const w=m>=70?'draw':G.cs1Hue<G.cs2Hue?'p1':'p2';
   const detail=`<div style="text-align:center"><div style="display:flex;justify-content:center;gap:16px;margin-bottom:12px"><div style="width:44px;height:44px;border-radius:50%;background:${c1};box-shadow:0 0 16px ${c1}"></div><div style="width:44px;height:44px;border-radius:50%;background:${c2};box-shadow:0 0 16px ${c2}"></div></div><div style="font-size:30px;font-family:var(--font-display);color:var(--gold);font-weight:700">${m}% match</div><div style="font-size:13px;color:var(--muted);font-weight:600;margin-top:4px">${m>=80?'Telepathic! 💕':m>=60?'So in sync!':m>=40?'Interesting contrast...':'Very different vibes!'}</div></div>`;
   finishRound(w,detail);
